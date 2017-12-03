@@ -193,6 +193,8 @@ public class GUI {
             //Text-fields
             tollSizeTextField.setText(""+game.getSettings().getTollToBePaid());
             muggingTextField.setText(""+game.getSettings().getRisk());
+            minRobbedTextField.setText(""+game.getSettings().getMinRobbery());
+            maxRobbedTextField.setText(""+game.getSettings().getMaxRobbery());
         
             //Game speed
             speed = game.getSettings().getGameSpeed();
@@ -464,10 +466,24 @@ public class GUI {
                     JOptionPane.showMessageDialog(frame, "'Toll size' and 'Risk rob' must be integers.", "Malformed input", JOptionPane.ERROR_MESSAGE);
                     return;
                 }
-                
+
+                //Robbing size
+                int robMin, robMax;
+                try{
+                    robMin = Integer.parseInt(minRobbedTextField.getText());
+                    robMax  = Integer.parseInt(maxRobbedTextField.getText());
+                    if(robMin < 0 || robMax < 0 || robMin > 100 || robMax > 100 || robMin >= robMax){
+                        JOptionPane.showMessageDialog(frame, "'Min loss' and 'Max loss' must be between 0 and 100, and max needs to be bigger than min.", "Malformed input", JOptionPane.ERROR_MESSAGE);
+                        return;
+                    }
+                } catch (NumberFormatException e){
+                    JOptionPane.showMessageDialog(frame, "'Min loss' and 'Max loss' must be integers.", "Malformed input", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
                 
                 game.getSettings().setRisk(riskRob);
                 game.getSettings().setTollToBePaid(tollSize);
+                game.getSettings().setMinMaxRobbery(robMin,robMax);
                 
                 frame.setVisible(false);
                 mainFrame.setVisible(true);
