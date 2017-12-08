@@ -2,7 +2,7 @@ import java.awt.Point;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.ArrayList; 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -20,7 +20,7 @@ import java.util.Set;
  *
  */
 public class Game {
- 
+
 	/** Set of all countries in the game */
 	private List<Country> countries;
 	
@@ -32,6 +32,9 @@ public class Game {
 	
 	/** The random generator */
 	private Random random;
+	
+	/** A Log object */
+	private Log log;
 	
 	/** Whether or not to log this game */
 	private boolean logging;
@@ -82,6 +85,7 @@ public class Game {
 		}
 
 		//Logging
+		log = new Log(seed, settings);
 		logging = false;
 	}
 	
@@ -95,6 +99,58 @@ public class Game {
 	 */
 	public boolean ongoing(){
 		return !aborted && timeLeft!=0;
+	}
+	
+	/**
+	 * Get the Log object.
+	 * @return A reference to the current Log object.
+	 */
+	public Log getLog(){
+		return log;
+	}
+	
+	/**
+	 * Plays a given Log object within this Game window.
+	 * Will remove the normal GUI-controlled Player and replace with an instance of LogPlayer.
+	 * Also resets the game to the seed specified in the log.
+	 * @param log The Log to play
+	 */
+	public void playLog(Log log){
+		LogPlayer lp = new LogPlayer(log, guiPlayer.getPosition());
+		List<Player> newPlayers = new ArrayList<Player>();
+		for(Player p : players){
+			if(p instanceof RandomPlayer || p instanceof GreedyPlayer || p instanceof SmartPlayer)
+				newPlayers.add(p);
+		}
+		newPlayers.add(lp);
+		guiPlayer = lp;
+		players = newPlayers;
+		Collections.sort(players);
+		this.seed = log.getSeed();
+		this.settings = log.getSettings();
+		reset(true, false);
+		logging = true;
+	}
+	
+	/**
+	 * Removes the current LogPlayer instance, and replaces it with a regular Player object.
+	 * Also resets this Game instance.
+	 */
+	private void removeLogPlayer(){
+		List<Player> newPlayers = new ArrayList<Player>();
+		boolean seenGUIPlayer = false;
+		for(Player p : players){
+			if(!(p instanceof LogPlayer))
+				newPlayers.add(p);
+			if(p.getClass() == Player.class)
+				seenGUIPlayer = true;
+		}
+		if(!seenGUIPlayer){
+			guiPlayer = new Player(guiPlayer.getPosition());
+			newPlayers.add(guiPlayer);
+		}
+		players = newPlayers;
+		Collections.sort(players);
 	}
 	
 	/**
@@ -165,11 +221,15 @@ public class Game {
 		if(!repeat){
 			seed = random.nextInt(Integer.MAX_VALUE);
 		}
+		log = new Log(seed, settings);
 		random = new Random(seed);
 		timeLeft = totalTimeLeft;
 		aborted=false;
 		
-
+		if(removeLog){
+			removeLogPlayer();
+			logging = false;
+		}
 		
 		for(Country c : countries)
 			c.reset();
@@ -273,8 +333,14 @@ public class Game {
 			p.step();
 			if(p.getMoney()<0)p.reset();
 		}
-		--timeLeft;
+		if(--timeLeft == 0)
+			try {
+				log.save("last.log");
+			} catch (IOException e) {
+				System.out.println("Unable to save log");
+			}
 	}
+	
 	/**
 	 * Gets the number of steps remaining in this Game instance.
 	 * @return An integer representing how many steps this Game object can take before reaching the end.
@@ -290,6 +356,7 @@ public class Game {
 	 * @param c The city to click.
 	 */
 	public void clickCity(City c){
+		log.add(timeLeft-(logging?1:0), c);
 		
 		guiPlayer.travelTo(c);
 	}
@@ -353,5 +420,259 @@ public class Game {
 	 */
 	public void setTotalTimeLeft(int totalTimeLeft) {
 		this.totalTimeLeft = totalTimeLeft;
+	}
+	
+	/**
+	 * Tests whether or not this computer game (probably) works.
+	 * Runs a game with a predetermined seed, and checks if all values match with the expected values.
+	 * Will print errors to System.out.
+	 * @return Returns true if the implementation passes the test, and false otherwise.
+	 */
+	public static boolean testCG3(){
+		
+		if(!Files.exists(Paths.get("network.dat"))){
+			System.out.println("Cannot perform test without 'network.dat'. Aborting...");
+			return false;
+		}
+		
+		Game g = Generator.generateGame(1, "network.dat");
+		
+		for(int i=0; i<50; i++)
+			g.step();
+		
+		for(Player p : g.getPlayers()){
+			int expectedMoney = -1,
+				expectedRemaining = -1;
+			String expectedFrom = "",
+				   expectedTo = "";
+			
+			if(p.getClass() == Player.class){
+				expectedMoney = 0;
+				expectedRemaining = 0;
+				expectedFrom = "Malmö";
+				expectedTo = "Malmö";
+			}
+			if(p.getClass() == RandomPlayer.class){
+				expectedMoney = 159;
+				expectedRemaining = 2;
+				expectedFrom = "Aarhus";
+				expectedTo = "Odense";
+			}
+			if(p.getClass() == GreedyPlayer.class){
+				expectedMoney = 358;
+				expectedRemaining = 7;
+				expectedFrom = "Helsinki";
+				expectedTo = "Stockholm";
+			}
+			if(p.getClass() == SmartPlayer.class){
+				expectedMoney = 174;
+				expectedRemaining = 0;
+				expectedFrom = "Nykøbing";
+				expectedTo = "Nykøbing";
+			}
+			
+			if(p.getMoney()!=expectedMoney){
+				System.out.println("Test failed: incorrect amount of money for "+p.getName()+"\n\tExpected: "+expectedMoney+"€\n\tReceived: "+p.getMoney()+"€");
+				return false;
+			}
+			if(p.getPosition().getDistance()!=expectedRemaining){
+				System.out.println("Test failed: incorrect remaining distance for "+p.getName()+"\n\tExpected: "+expectedRemaining+"\n\tReceived: "+p.getPosition().getDistance());
+				return false;
+			}
+			if(!p.getPosition().getFrom().getName().equals(expectedFrom)){
+				System.out.println("Test failed: incorrect departing city (from) for "+p.getName()+"\n\tExpected: "+expectedFrom+"\n\tReceived: "+p.getPosition().getFrom().getName());
+				return false;
+			}
+			if(!p.getPosition().getTo().getName().equals(expectedTo)){
+				System.out.println("Test failed: incorrect arriving city (to) for "+p.getName()+"\n\tExpected: "+expectedTo+"\n\tReceived: "+p.getPosition().getTo().getName());
+				return false;
+			}
+		}
+		
+		for(Country c : g.getCountries())
+			for(City cc : c.getCities()){
+				int expectedValue = cc.getValue();
+				
+				switch(cc.getName()){
+					case "Tromsø":
+						expectedValue = 180;
+						break;
+					case "Struer":
+						expectedValue = 3;
+						break;
+					case "Kokkola":
+						expectedValue = 85;
+						break;
+					case "Pohjanmaa":
+						expectedValue = 100;
+						break;
+					case "Dombås":
+						expectedValue = 110;
+						break;
+					case "Lillehammer":
+						expectedValue = 110;
+						break;
+					case "Myrdal":
+						expectedValue = 70;
+						break;
+					case "Narvik":
+						expectedValue = 150;
+						break;
+					case "Åndalsnes":
+						expectedValue = 150;
+						break;
+					case "Falun":
+						expectedValue = 21;
+						break;
+					case "Gällivare":
+						expectedValue = 100;
+						break;
+					case "Helsingborg":
+						expectedValue = 100;
+						break;
+					case "Karlskrona":
+						expectedValue = 18;
+						break;
+					case "Kiruna":
+						expectedValue = 80;
+						break;
+					case "Kvillsfors":
+						expectedValue = 100;
+						break;
+					case "Linköping":
+						expectedValue = 41;
+						break;
+					case "Luleå":
+						expectedValue = 95;
+						break;
+					case "Mora":
+						expectedValue = 50;
+						break;
+					case "Strömstad":
+						expectedValue = 120;
+						break;
+					case "Torsby":
+						expectedValue = 40;
+						break;
+					case "Umeå":
+						expectedValue = 29;
+						break;
+					case "Uppsala":
+						expectedValue = 24;
+						break;
+					case "Örebro":
+						expectedValue = 32;
+						break;
+					case "Nykøbing":
+						expectedValue = 3;
+						break;
+					case "Herning":
+						expectedValue = 0;
+						break;
+					case "Trondheim":
+						expectedValue = 140;
+						break;
+					case "Oslo":
+						expectedValue = 125;
+						break;
+					case "Bergen":
+						expectedValue = 175;
+						break;
+					case "Kristiansand":
+						expectedValue = 48;
+						break;
+					case "Stavanger":
+						expectedValue = 200;
+						break;
+					case "Bodø":
+						expectedValue = 40;
+						break;
+					case "Kirkenes":
+						expectedValue = 200;
+						break;
+					case "Kuopio":
+						expectedValue = 50;
+						break;
+					case "Tampere":
+						expectedValue = 48;
+						break;
+					case "Kermi":
+						expectedValue = 40;
+						break;
+					case "Pori":
+						expectedValue = 30;
+						break;
+					case "Vaasa":
+						expectedValue = 50;
+						break;
+					case "Oulu":
+						expectedValue = 70;
+						break;
+					case "Turku":
+						expectedValue = 70;
+						break;
+					case "Helsinki":
+						expectedValue = 160;
+						break;
+					case "Rovaniemi":
+						expectedValue = 30;
+						break;
+					case "Odense":
+						expectedValue = 0;
+						break;
+					case "Esbjerg":
+						expectedValue = 5;
+						break;
+					case "Copenhagen":
+						expectedValue = 598;
+						break;
+					case "Aarhus":
+						expectedValue = 0;
+						break;
+					case "Aalborg":
+						expectedValue = 39;
+						break;
+					case "Gävle":
+						expectedValue = 79;
+						break;
+					case "Göteborg":
+						expectedValue = 90;
+						break;
+					case "Kalmar":
+						expectedValue = 90;
+						break;
+					case "Malmö":
+						expectedValue = 13;
+						break;
+					case "Stockholm":
+						expectedValue = 319;
+						break;
+					case "Jönköping":
+						expectedValue = 110;
+						break;
+					case "Sundsvall":
+						expectedValue = 18;
+						break;
+					case "Norrköping":
+						expectedValue = 80;
+						break;
+					case "Karlstad":
+						expectedValue = 85;
+						break;
+					case "Visby":
+						expectedValue = 90;
+						break;
+					case "Östersund":
+						expectedValue = 50;
+						break;
+				}
+				
+				if(cc.getValue() != expectedValue){
+					System.out.println("Test failed: invalid value for city "+cc.getName()+":\n\tExpected: "+expectedValue+"€\n\tReceived: "+cc.getValue()+"€");
+					return false;
+				}
+			}
+		System.out.println("Test successful!");
+		return true;
 	}
 }
