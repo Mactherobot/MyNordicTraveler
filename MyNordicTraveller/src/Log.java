@@ -60,10 +60,7 @@ public class Log {
         HashMap<Integer,String> ch = new HashMap<>();
         for (int i = 7; i < s.length; i++) {
             String[] map = s[i].split(" ");
-            for (int j = 0; j < map.length; j++) {
-                ch.put(Integer.parseInt(map[j]),map[j+1]);
-                j++;
-            }
+                ch.put(Integer.parseInt(map[0]),map[1]);
         }
         this.choices = ch;
     }
