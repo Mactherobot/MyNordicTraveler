@@ -1,10 +1,10 @@
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * A Log records what happened in a single instance of this game.
@@ -15,6 +15,7 @@ import java.util.Set;
  */
 public class Log {
     public static void main(String[] args) {
+    testCG5files();
     testCG5strings();
     }
 
@@ -48,21 +49,30 @@ public class Log {
 
     /**
      * Instantiates a new Log object from its String representation.
-     * @param s The string representation of this Log object.
+     * @param log The string representation of this Log object.
      * @throws SettingsException May be thrown if the Settings is corrupted (too few lines, illegal format).
      * @throws LogException May be thrown if it is unable to properly create this log.
      */
     public Log(String log) throws SettingsException, LogException{
         String[] s = log.split("\r\n");
-        this.seed = Integer.parseInt(s[0]);
-        String[] settings = Arrays.copyOfRange(s,1,7);
-        this.settings = new Settings(settings);
-        HashMap<Integer,String> ch = new HashMap<>();
+        //Checks if the log has the desired length.
+        if (s.length < 7){
+            throw new LogException("The log has only length: " + s.length + " There should be at least 7 lines");
+        }
+        //Checks if there's letters in the first line of the log. And sets the seed for the game.
+        try {
+            this.seed = Integer.parseInt(s[0]);
+        } catch (NumberFormatException e){
+            throw new LogException("Only numbers in the first line!");
+        }
+        //Sets the settings that game had.
+        this.settings = new Settings(Arrays.copyOfRange(s,1,7));
+        //Loads all the moves the player has made during the game.
+        choices = new HashMap<>();
         for (int i = 7; i < s.length; i++) {
             String[] map = s[i].split(" ");
-                ch.put(Integer.parseInt(map[0]),map[1]);
+            choices.put(Integer.parseInt(map[0]),map[1]);
         }
-        this.choices = ch;
     }
 
     /**
@@ -101,6 +111,10 @@ public class Log {
         return choices.get(t);
     }
 
+    /**
+     * Creates a toString so that when you want to save a log it's the right output.
+     * @return String
+     */
     @Override
     public String toString(){
         StringBuilder sb = new StringBuilder(seed + "\r\n");
@@ -118,6 +132,9 @@ public class Log {
      * @throws IOException May be thrown if various I/O-exceptions occur.
      */
     public void save(String path) throws IOException{
+        PrintWriter pW = new PrintWriter(path,"windows-1252");
+        pW.write(toString());
+        pW.close();
     }
 
     /**
